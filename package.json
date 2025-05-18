@@ -1,0 +1,23 @@
+{
+  "name": "pharos-testnet-auto-bot",
+  "version": "1.0.0",
+  "description": "Pharos Testnet Automation Bot by miraiweb3",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "pharos",
+    "testnet",
+    "automation",
+    "bot",
+  ],
+  "author": "miraiweb3",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.0.0",
+    "https-proxy-agent": "^5.0.0",
+    "random-useragent": "^0.5.0",
+    "axios": "^1.5.0"
+  }
+}
