@@ -6,7 +6,7 @@ const axios = require('axios');
 const path = require('path');
 
 /**
- * Pharos Testnet Operations Bot
+ * Pharos Testnet Automation Bot
  * Developed by: miraiweb3 (https://github.com/mirai-web3)
  * 
  * Operation Sequence:
