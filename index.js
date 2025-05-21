@@ -1,21 +1,21 @@
+/**
+ * Pharos Testnet Operations Bot
+ * Developed by: miraiweb3 (https://github.com/mirai-web3)
+ * 
+ * Automates various operations on the Pharos testnet:
+ * - Faucet claims
+ * - Daily check-ins
+ * - PHRS transfers
+ * - PHRS ↔ WPHRS wrapping/unwrapping
+ */
+
+// @ts-nocheck
 const { ethers } = require('ethers');
 const fs = require('fs');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const randomUseragent = require('random-useragent');
 const axios = require('axios');
 const path = require('path');
-
-/**
- * Pharos Testnet Automation Bot
- * Developed by: miraiweb3 (https://github.com/mirai-web3)
- * 
- * Operation Sequence:
- * 1. Faucet Claim
- * 2. Daily Check-in
- * 3. PHRS Transfers
- * 4. PHRS → WPHRS (Wrap)
- * 5. Unwrap all remaining WPHRS balance to PHRS
- */
 
 // ======= TERMINAL COLORS =======
 const colors = {
@@ -41,6 +41,7 @@ const CONFIG = {
     rpcUrl: 'https://testnet.dplabs-internal.com'
   },
   contract: {
+    PHRS: '0xf6a07fe10e28a70d1b0f36c7eb7745d2bae2a312',
     WPHRS: '0x76aaada469d23216be5f7c596fa25f282ff9b364'
   },
   api: {
@@ -48,28 +49,44 @@ const CONFIG = {
     inviteCode: 'pcDSvtHJeoqTPMAU'
   },
   timing: {
-    betweenOps: [2000, 5000],
-    betweenWallets: [5000, 15000],
-    cycleInterval: 30
+    betweenOps: [2000, 5000],      // Min/max ms between operations
+    betweenWallets: [5000, 15000], // Min/max ms between wallets
+    cycleInterval: 30              // Minutes between cycles
+  },
+  display: {
+    clearBetweenSteps: true,       // Clear terminal between major steps
+    showStepSummary: true,         // Show summary of previous steps when clearing
+    compactMode: false             // More compact display (fewer blank lines)
   }
 };
 
 // ======= OPERATION PARAMETERS =======
 const PARAMS = {
+  // Transaction amounts
   WRAP_AMOUNT: '0.000005342',
   TRANSFER_AMOUNT: '0.000001234',
+  
+  // Operation counts
   TRANSFER_COUNT: 10,
   WRAP_COUNT: 10,
+  
+  // Randomization
   RANDOMIZE: true,
   VARIATION: 0.1
 };
 
-// ======= LOGGER =======
+/**
+ * Logger class for handling console output and formatting
+ */
 class Logger {
   constructor(options = {}) {
     this.logToFile = false; // Disabled by default to save disk space
     this.logDir = options.logDir || './logs';
     this.sessionId = new Date().toISOString().replace(/[:.]/g, '-');
+    this.stepResults = {};
+    this.currentWallet = "";
+    this.currentWalletIndex = 0;
+    this.totalWallets = 0;
   }
   
   writeToFile(message) {
@@ -82,7 +99,81 @@ class Logger {
     return;
   }
   
+  /**
+   * Clears the terminal screen and shows relevant context
+   */
+  clearScreen() {
+    if (CONFIG.display.clearBetweenSteps) {
+      process.stdout.write('\x1Bc');
+      console.clear();
+      
+      // Show banner again
+      this.showBanner();
+      
+      // Show step summary if enabled
+      if (CONFIG.display.showStepSummary && this.currentWallet) {
+        this.showStepSummary();
+      }
+    }
+  }
   
+  /**
+   * Displays the bot banner
+   */
+  showBanner() {
+    const banner = `
+${colors.cyan}${colors.bright}====================================================
+  PHAROS TESTNET AUTOMATION BOT - by miraiweb3
+  Faucet → Check-in → Transfer → Wrap → Unwrap
+====================================================${colors.reset}
+`;
+    console.log(banner);
+  }
+  
+  /**
+   * Shows a summary of completed steps
+   */
+  showStepSummary() {
+    const timestamp = new Date().toLocaleTimeString();
+    const progress = `${this.currentWalletIndex + 1}/${this.totalWallets}`;
+    const shortenedAddress = this.currentWallet ? 
+      `${this.currentWallet.slice(0, 6)}...${this.currentWallet.slice(-4)}` : "";
+    
+    console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bgBlue}${colors.bright} WALLET ${progress} ${colors.reset} ${colors.blue}${shortenedAddress}${colors.reset}\n`);
+    
+    // Show status of completed steps
+    const steps = Object.keys(this.stepResults);
+    if (steps.length > 0) {
+      console.log(`${colors.cyan}Steps completed:${colors.reset}`);
+      steps.forEach(step => {
+        const result = this.stepResults[step];
+        const statusColor = result.success ? colors.green : colors.yellow;
+        console.log(`  ${statusColor}${step}:${colors.reset} ${result.message}`);
+      });
+      console.log("");
+    }
+  }
+  
+  /**
+   * Records the result of a completed step
+   */
+  recordStepResult(step, success, message) {
+    this.stepResults[step] = { success, message };
+  }
+  
+  /**
+   * Sets the current wallet being processed
+   */
+  setCurrentWallet(address, index, total) {
+    this.currentWallet = address;
+    this.currentWalletIndex = index;
+    this.totalWallets = total;
+    this.stepResults = {}; // Reset step results for new wallet
+  }
+  
+  /**
+   * General logging method with formatting
+   */
   log(type, message, consoleOnly = false) {
     let formatted;
     const timestamp = new Date().toLocaleTimeString();
@@ -117,6 +208,7 @@ class Logger {
     // No file logging
   }
   
+  // Shorthand logging methods
   info(message) { this.log('info', message); }
   success(message) { this.log('success', message); }
   error(message) { this.log('error', message); }
@@ -124,48 +216,63 @@ class Logger {
   tx(message) { this.log('tx', message); }
   step(message) { this.log('step', message); }
   
+  // API logging methods (disabled)
   apiRequest(method, endpoint) {
-    const timestamp = new Date().toLocaleTimeString();
-    this.writeToFile(`[${timestamp}] [API] Making ${method.toUpperCase()} request to ${endpoint}`);
+    // Log disabled - console only when needed
   }
   
   apiResponse(status) {
-    const timestamp = new Date().toLocaleTimeString();
-    this.writeToFile(`[${timestamp}] [API] Request successful: ${status}`);
+    // Log disabled - console only when needed
   }
   
+  /**
+   * Displays the banner and clears the screen
+   */
   banner() {
     // Clear the terminal first
     process.stdout.write('\x1Bc');
     console.clear();
     
-    const banner = `
-${colors.cyan}${colors.bright}====================================================
-  PHAROS TESTNET AUTOMATION BOT - by miraiweb3
-  Faucet → Check-in → Transfer → Wrap → Unwrap
-====================================================${colors.reset}
-`;
-    console.log(banner);
-    this.writeToFile("=== PHAROS TESTNET AUTOMATION BOT - by miraiweb3 ===");
-    this.writeToFile("Faucet → Check-in → Transfer → Wrap → Unwrap");
+    this.showBanner();
+    // No file logging
   }
   
-  countdown(seconds) {
-    process.stdout.write(`\r${colors.yellow}⏱  Waiting for next cycle in: ${Math.floor(seconds/60)}m ${seconds%60}s ${colors.reset}`);
-  }
-  
+  /**
+   * Displays an operation header
+   */
   operation(walletIndex, walletCount, address, operationName) {
+    // Set current wallet info
+    this.setCurrentWallet(address, walletIndex, walletCount);
+    
+    // Clear the screen before showing the operation header
+    if (CONFIG.display.clearBetweenSteps) {
+      this.clearScreen();
+    }
+    
     const timestamp = new Date().toLocaleTimeString();
     const progress = `${walletIndex + 1}/${walletCount}`;
     const shortenedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
     
     console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bgBlue}${colors.bright} WALLET ${progress} ${colors.reset} ${colors.blue}${shortenedAddress}${colors.reset} ${colors.bgMagenta}${colors.bright} ${operationName} ${colors.reset}`);
-    this.writeToFile(`[${timestamp}] === WALLET ${progress} (${shortenedAddress}) - ${operationName} ===`);
+  }
+  
+  /**
+   * Displays a countdown timer
+   */
+  countdown(seconds) {
+    process.stdout.write(`\r${colors.yellow}⏱  Waiting for next cycle in: ${Math.floor(seconds/60)}m ${seconds%60}s ${colors.reset}`);
   }
 }
 
-// ======= FILE MANAGER =======
+/**
+ * FileManager static class for loading configuration files
+ */
 class FileManager {
+  /**
+   * Loads lines from a file, trimming whitespace
+   * @param {string} filename - The file to load
+   * @returns {string[]} Array of non-empty lines
+   */
   static loadLines(filename) {
     try {
       if (!fs.existsSync(filename)) {
@@ -182,24 +289,42 @@ class FileManager {
     }
   }
   
+  /**
+   * Loads private keys from privatekeys.txt
+   * @returns {string[]} Array of private keys
+   */
   static loadPrivateKeys() {
     // Load private keys from privatekeys.txt file only
     return this.loadLines('privatekeys.txt')
       .filter(line => line.startsWith('0x'));
   }
   
+  /**
+   * Loads proxy configurations from proxies.txt
+   * @returns {string[]} Array of proxy strings
+   */
   static loadProxies() {
     return this.loadLines('proxies.txt');
   }
   
+  /**
+   * Loads wallet addresses from wallets.txt
+   * @returns {string[]} Array of wallet addresses
+   */
   static loadWalletAddresses() {
     return this.loadLines('wallets.txt')
       .filter(addr => ethers.isAddress(addr));
   }
 }
 
-// ======= PROXY MANAGER =======
+/**
+ * ProxyManager class for intelligent proxy rotation and tracking
+ */
 class ProxyManager {
+  /**
+   * Creates a new proxy manager instance
+   * @param {string[]} proxies - List of proxy URLs
+   */
   constructor(proxies = []) {
     this.proxies = proxies;
     this.currentIndex = 0;
@@ -212,6 +337,10 @@ class ProxyManager {
     }
   }
   
+  /**
+   * Gets the next best proxy to use
+   * @returns {string|null} Proxy URL or null if none available
+   */
   getNext() {
     if (this.proxies.length === 0) return null;
     
@@ -234,6 +363,10 @@ class ProxyManager {
     return availableProxies[randomIndex];
   }
   
+  /**
+   * Records a successful operation with a proxy
+   * @param {string} proxy - The proxy that was successful
+   */
   recordSuccess(proxy) {
     if (!proxy) return;
     
@@ -242,6 +375,10 @@ class ProxyManager {
     this.successRates.set(proxy, Math.min(1.0, newRate));
   }
   
+  /**
+   * Records a failed operation with a proxy
+   * @param {string} proxy - The proxy that failed
+   */
   recordFailure(proxy) {
     if (!proxy) return;
     
@@ -255,6 +392,10 @@ class ProxyManager {
     }
   }
   
+  /**
+   * Gets statistics about proxy availability
+   * @returns {Object} Proxy statistics
+   */
   getStats() {
     return {
       total: this.proxies.length,
@@ -264,7 +405,9 @@ class ProxyManager {
   }
 }
 
-// ======= API CLIENT =======
+/**
+ * API client for interacting with the Pharos API
+ */
 class PharosAPI {
   constructor(wallet, logger, proxy = null) {
     this.wallet = wallet;
@@ -444,7 +587,9 @@ class PharosAPI {
   }
 }
 
-// ======= TRANSACTION HANDLER =======
+/**
+ * Handles blockchain transactions
+ */
 class TransactionHandler {
   constructor(wallet, logger) {
     this.wallet = wallet;
@@ -660,7 +805,9 @@ class TransactionHandler {
   }
 }
 
-// ======= OPERATION TRACKER =======
+/**
+ * Tracks statistics for operations
+ */
 class OperationTracker {
   constructor() {
     this.reset();
@@ -697,7 +844,9 @@ class OperationTracker {
   }
 }
 
-// ======= HELPER FUNCTIONS =======
+/**
+ * Helper functions for timing and delays
+ */
 async function sleep(min, max) {
   const delay = min + Math.random() * (max - min);
   return new Promise(resolve => setTimeout(resolve, delay));
@@ -714,7 +863,9 @@ async function countdown(minutes) {
   console.log('\n');
 }
 
-// ======= WALLET PROCESSOR =======
+/**
+ * Process a single wallet through all operations
+ */
 async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalWallets, stats) {
   const shortAddress = `${wallet.address}`;
   logger.operation(walletIndex, totalWallets, shortAddress, "STARTING OPERATIONS");
@@ -731,6 +882,7 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 1: FAUCET CLAIM");
   const faucetSuccess = await pharosApi.claimFaucet();
   stats.recordOperation('faucets', faucetSuccess);
+  logger.recordStepResult("Faucet", faucetSuccess, faucetSuccess ? "Claimed successfully" : "Not available or failed");
   
   await sleep(...CONFIG.timing.betweenOps);
   
@@ -738,6 +890,7 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 2: DAILY CHECK-IN");
   const checkinSuccess = await pharosApi.dailyCheckIn();
   stats.recordOperation('checkins', checkinSuccess);
+  logger.recordStepResult("Check-in", checkinSuccess, checkinSuccess ? "Completed successfully" : "Already done or failed");
   
   await sleep(...CONFIG.timing.betweenOps);
   
@@ -764,6 +917,9 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   }
   
   logger.info(`Completed ${transferCount}/${PARAMS.TRANSFER_COUNT} transfers`);
+  logger.recordStepResult("Transfers", transferCount > 0, `${transferCount}/${PARAMS.TRANSFER_COUNT} completed`);
+  
+  await sleep(...CONFIG.timing.betweenOps);
   
   // 4. STEP FOUR: WRAP PHRS TO WPHRS
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 4: WRAP PHRS → WPHRS");
@@ -779,12 +935,16 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   }
   
   logger.info(`Completed ${wrapCount}/${PARAMS.WRAP_COUNT} wraps`);
+  logger.recordStepResult("Wraps", wrapCount > 0, `${wrapCount}/${PARAMS.WRAP_COUNT} completed`);
+  
+  await sleep(...CONFIG.timing.betweenOps);
   
   // 5. STEP FIVE: UNWRAP ALL WPHRS TO PHRS
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 5: UNWRAP ALL WPHRS → PHRS");
   
   const unwrapSuccess = await txHandler.unwrapAll();
   stats.recordOperation('unwraps', unwrapSuccess);
+  logger.recordStepResult("Unwrap", unwrapSuccess, unwrapSuccess ? "Unwrapped all WPHRS" : "No WPHRS to unwrap or failed");
   
   // Get final balances
   const finalBalances = await txHandler.getBalances();
@@ -792,14 +952,15 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   
   // Record wallet completion
   stats.incrementWallet();
-  logger.success(`Wallet ${walletIndex + 1} processing completed\n`);
+  logger.success(`Wallet ${walletIndex + 1} processing completed`);
 }
 
-// ======= MAIN EXECUTION =======
 // Initialize logger
 const logger = new Logger();
 
-// Start the bot
+/**
+ * Main execution function
+ */
 async function main() {
   // Clear terminal screen when bot starts
   process.stdout.write('\x1Bc'); // This is a more reliable way to clear the screen
