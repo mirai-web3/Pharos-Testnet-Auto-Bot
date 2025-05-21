@@ -1,8 +1,8 @@
 /**
- * Pharos Testnet Operations Bot
+ * Pharos Testnet Automation Bot
  * Developed by: miraiweb3 (https://github.com/mirai-web3)
  * 
- * Automates various operations on the Pharos testnet:
+ * Automates various interactions on the Pharos testnet:
  * - Faucet claims
  * - Daily check-ins
  * - PHRS transfers
