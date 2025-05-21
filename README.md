@@ -23,8 +23,8 @@ An automated bot for performing routine operations on the Pharos Testnet, design
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/mirai-web3/pharos-testnet-auto-bot.git
-   cd pharos-testnet-auto-bot
+   git clone https://github.com/mirai-web3/Pharos-Testnet-Auto-Bot.git
+   cd Pharos-Testnet-Auto-Bot
    ```
 
 2. Install dependencies:
