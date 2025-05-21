@@ -1,5 +1,5 @@
 /**
- * Pharos Testnet Automation Bot
+ * Pharos Testnet Interactions Bot
  * Developed by: miraiweb3 (https://github.com/mirai-web3)
  * 
  * Automates various interactions on the Pharos testnet:
@@ -49,7 +49,7 @@ const CONFIG = {
     inviteCode: 'pcDSvtHJeoqTPMAU'
   },
   timing: {
-    betweenOps: [2000, 5000],      // Min/max ms between operations
+    betweenInteractions: [2000, 5000],      // Min/max ms between interactions
     betweenWallets: [5000, 15000], // Min/max ms between wallets
     cycleInterval: 30              // Minutes between cycles
   },
@@ -123,7 +123,7 @@ class Logger {
   showBanner() {
     const banner = `
 ${colors.cyan}${colors.bright}====================================================
-  PHAROS TESTNET AUTOMATION BOT - by miraiweb3
+  PHAROS TESTNET INTERACTION BOT - by miraiweb3
   Faucet → Check-in → Transfer → Wrap → Unwrap
 ====================================================${colors.reset}
 `;
@@ -238,13 +238,13 @@ ${colors.cyan}${colors.bright}==================================================
   }
   
   /**
-   * Displays an operation header
+   * Displays an interaction header
    */
-  operation(walletIndex, walletCount, address, operationName) {
+  operation(walletIndex, walletCount, address, interactionName) {
     // Set current wallet info
     this.setCurrentWallet(address, walletIndex, walletCount);
     
-    // Clear the screen before showing the operation header
+    // Clear the screen before showing the interaction header
     if (CONFIG.display.clearBetweenSteps) {
       this.clearScreen();
     }
@@ -253,7 +253,7 @@ ${colors.cyan}${colors.bright}==================================================
     const progress = `${walletIndex + 1}/${walletCount}`;
     const shortenedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
     
-    console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bgBlue}${colors.bright} WALLET ${progress} ${colors.reset} ${colors.blue}${shortenedAddress}${colors.reset} ${colors.bgMagenta}${colors.bright} ${operationName} ${colors.reset}`);
+    console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bgBlue}${colors.bright} WALLET ${progress} ${colors.reset} ${colors.blue}${shortenedAddress}${colors.reset} ${colors.bgMagenta}${colors.bright} ${interactionName} ${colors.reset}`);
   }
   
   /**
@@ -644,22 +644,22 @@ class TransactionHandler {
     return amount.toFixed(decimalPlaces);
   }
   
-  async retryableOperation(operationName, operation) {
+  async retryableInteraction(interactionName, interaction) {
     this.retryCount = 0;
     
     while (this.retryCount <= this.maxRetries) {
       try {
-        return await operation();
+        return await interaction();
       } catch (error) {
         this.retryCount++;
         
         if (this.retryCount > this.maxRetries) {
-          this.logger.error(`${operationName} failed after ${this.maxRetries} retries: ${error.message}`);
+          this.logger.error(`${interactionName} failed after ${this.maxRetries} retries: ${error.message}`);
           throw error;
         }
         
         const delay = Math.pow(2, this.retryCount) * 1000; // Exponential backoff
-        this.logger.warn(`${operationName} attempt ${this.retryCount} failed: ${error.message}. Retrying in ${delay/1000}s...`);
+        this.logger.warn(`${interactionName} attempt ${this.retryCount} failed: ${error.message}. Retrying in ${delay/1000}s...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -670,7 +670,7 @@ class TransactionHandler {
     
     this.logger.tx(`Wrap ${index+1}: ${amount} PHRS → WPHRS`);
     
-    return this.retryableOperation('Wrap', async () => {
+    return this.retryableInteraction('Wrap', async () => {
       const balances = await this.getBalances();
       const required = ethers.parseEther(amount);
       
@@ -707,7 +707,7 @@ class TransactionHandler {
   async unwrapAll() {
     this.logger.tx(`Unwrapping all remaining WPHRS balance to PHRS`);
     
-    return this.retryableOperation('Unwrap All', async () => {
+    return this.retryableInteraction('Unwrap All', async () => {
       const balances = await this.getBalances();
       
       if (balances.wphrs === 0n) {
@@ -770,7 +770,7 @@ class TransactionHandler {
     
     this.logger.tx(`Transfer ${index+1}: ${amount} PHRS to ${truncatedAddress}`);
     
-    return this.retryableOperation('Transfer', async () => {
+    return this.retryableInteraction('Transfer', async () => {
       const balances = await this.getBalances();
       const required = ethers.parseEther(amount);
       
@@ -806,9 +806,9 @@ class TransactionHandler {
 }
 
 /**
- * Tracks statistics for operations
+ * Tracks statistics for interactions
  */
-class OperationTracker {
+class InteractionTracker {
   constructor() {
     this.reset();
     this.startTime = Date.now();
@@ -816,7 +816,7 @@ class OperationTracker {
   
   reset() {
     this.walletsProcessed = 0;
-    this.operations = {
+    this.interactions = {
       faucets: 0,
       checkins: 0,
       transfers: 0,
@@ -831,9 +831,9 @@ class OperationTracker {
     this.walletsProcessed++;
   }
   
-  recordOperation(type, success) {
-    if (this.operations[type] !== undefined) {
-      this.operations[type]++;
+  recordInteraction(type, success) {
+    if (this.interactions[type] !== undefined) {
+      this.interactions[type]++;
     }
     
     this.totalOps++;
@@ -864,11 +864,11 @@ async function countdown(minutes) {
 }
 
 /**
- * Process a single wallet through all operations
+ * Process a single wallet through all interactions
  */
 async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalWallets, stats) {
   const shortAddress = `${wallet.address}`;
-  logger.operation(walletIndex, totalWallets, shortAddress, "STARTING OPERATIONS");
+  logger.operation(walletIndex, totalWallets, shortAddress, "STARTING INTERACTIONS");
   
   // Initialize handlers
   const txHandler = new TransactionHandler(wallet, logger);
@@ -881,18 +881,18 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   // 1. STEP ONE: CLAIM FAUCET
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 1: FAUCET CLAIM");
   const faucetSuccess = await pharosApi.claimFaucet();
-  stats.recordOperation('faucets', faucetSuccess);
+  stats.recordInteraction('faucets', faucetSuccess);
   logger.recordStepResult("Faucet", faucetSuccess, faucetSuccess ? "Claimed successfully" : "Not available or failed");
   
-  await sleep(...CONFIG.timing.betweenOps);
+  await sleep(...CONFIG.timing.betweenInteractions);
   
   // 2. STEP TWO: DAILY CHECK-IN
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 2: DAILY CHECK-IN");
   const checkinSuccess = await pharosApi.dailyCheckIn();
-  stats.recordOperation('checkins', checkinSuccess);
+  stats.recordInteraction('checkins', checkinSuccess);
   logger.recordStepResult("Check-in", checkinSuccess, checkinSuccess ? "Completed successfully" : "Already done or failed");
   
-  await sleep(...CONFIG.timing.betweenOps);
+  await sleep(...CONFIG.timing.betweenInteractions);
   
   // 3. STEP THREE: TRANSFERS
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 3: TRANSFERS");
@@ -908,18 +908,18 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
       const targetAddress = targetAddresses[randomIndex];
       
       const success = await txHandler.transfer(targetAddress, i);
-      stats.recordOperation('transfers', success);
+      stats.recordInteraction('transfers', success);
       
       if (success) transferCount++;
       
-      await sleep(...CONFIG.timing.betweenOps);
+      await sleep(...CONFIG.timing.betweenInteractions);
     }
   }
   
   logger.info(`Completed ${transferCount}/${PARAMS.TRANSFER_COUNT} transfers`);
   logger.recordStepResult("Transfers", transferCount > 0, `${transferCount}/${PARAMS.TRANSFER_COUNT} completed`);
   
-  await sleep(...CONFIG.timing.betweenOps);
+  await sleep(...CONFIG.timing.betweenInteractions);
   
   // 4. STEP FOUR: WRAP PHRS TO WPHRS
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 4: WRAP PHRS → WPHRS");
@@ -927,23 +927,23 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   
   for (let i = 0; i < PARAMS.WRAP_COUNT; i++) {
     const success = await txHandler.wrap(i);
-    stats.recordOperation('wraps', success);
+    stats.recordInteraction('wraps', success);
     
     if (success) wrapCount++;
     
-    await sleep(...CONFIG.timing.betweenOps);
+    await sleep(...CONFIG.timing.betweenInteractions);
   }
   
   logger.info(`Completed ${wrapCount}/${PARAMS.WRAP_COUNT} wraps`);
   logger.recordStepResult("Wraps", wrapCount > 0, `${wrapCount}/${PARAMS.WRAP_COUNT} completed`);
   
-  await sleep(...CONFIG.timing.betweenOps);
+  await sleep(...CONFIG.timing.betweenInteractions);
   
   // 5. STEP FIVE: UNWRAP ALL WPHRS TO PHRS
   logger.operation(walletIndex, totalWallets, shortAddress, "STEP 5: UNWRAP ALL WPHRS → PHRS");
   
   const unwrapSuccess = await txHandler.unwrapAll();
-  stats.recordOperation('unwraps', unwrapSuccess);
+  stats.recordInteraction('unwraps', unwrapSuccess);
   logger.recordStepResult("Unwrap", unwrapSuccess, unwrapSuccess ? "Unwrapped all WPHRS" : "No WPHRS to unwrap or failed");
   
   // Get final balances
@@ -979,7 +979,7 @@ async function main() {
   }
   
   const proxyManager = new ProxyManager(proxyList);
-  const stats = new OperationTracker();
+  const stats = new InteractionTracker();
   
   // Simplified configuration log - one line
   logger.info(`Config: ${privateKeys.length} WALLET | ${targetAddresses.length} ADDRESS | ${proxyList.length} PROXY`);
