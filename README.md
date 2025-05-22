@@ -1,119 +1,128 @@
-# Pharos Testnet Automation Bot
+# Pharos Testnet Interaction Bot
 
-An automated bot for performing routine operations on the Pharos Testnet, designed to interact with the network efficiently while maintaining a clear console interface.
+Automated bot for interacting with the Pharos testnet blockchain.
 
-## 🚀 Features
+## 🚀 Functions
 
-- **Faucet Claims**: Automatically claim from the testnet faucet when available
-- **Daily Check-ins**: Perform daily check-ins to earn rewards
-- **PHRS Transfers**: Execute multiple transfers between wallets
-- **PHRS ↔ WPHRS Operations**: Wrap and unwrap tokens automatically
-- **Multi-Wallet Support**: Run operations across any number of wallets sequentially
-- **Proxy Support**: Route operations through HTTPS proxies for improved reliability
-- **Clear Console Interface**: Easy-to-follow operation progress with color coding
+The bot performs these interactions automatically:
 
-## 📋 Requirements
-
-- Node.js (v16+)
-- NPM or Yarn
-- Your private key wallet(s)
-- Proxy list (Optional)
+- **🚰 Faucet Claims** - Claims testnet tokens when available
+- **✅ Daily Check-ins** - Performs daily check-ins for rewards
+- **💸 PHRS Transfers** - Sends PHRS tokens between wallets
+- **🔄 Token Wrapping** - Wraps PHRS to WPHRS (10 times)
+- **🔓 Token Unwrapping** - Unwraps WPHRS back to PHRS (10 times)
 
 ## 📦 Installation
 
-1. Clone this repository:
+1. **Install Node.js** (version 16 or higher)
+
+2. **Clone and setup:**
    ```bash
    git clone https://github.com/mirai-web3/Pharos-Testnet-Auto-Bot.git
    cd Pharos-Testnet-Auto-Bot
+   npm install
    ```
 
-2. Install dependencies:
-   ```bash
-   npm install
+3. **Create configuration files:**
+
+   **privatekeys.txt** - Add your private keys (one per line):
+   ```
+   0x1234567890abcdef...
+   0xabcdef1234567890...
+   ```
+
+   **wallets.txt** - Add target wallet addresses for transfers:
+   ```
+   0x742d35cc6bf8b4c8d...
+   0x8ba1f109551bd432d...
+   ```
+
+   **proxies.txt** (optional) - Add proxy servers:
+   ```
+   http://username:password@proxy1:port
+   http://proxy2:port
    ```
 
 ## ⚙️ Configuration
 
-### File Setup
+Edit these settings in the code if needed:
 
-Before running the bot, you'll need to create these files:
-
-1. **privatekeys.txt**: Add one private key per line (must start with `0x`)
-   ```
-   0x123...abc
-   0x456...def
-   ```
-
-2. **wallets.txt**: Add wallet addresses for transfers
-   ```
-   0xabc...123
-   0xdef...456
-   ```
-
-3. **proxies.txt** (Optional): Add proxies in standard format
-   ```
-   http://user:pass@ip:port
-   http://ip:port
-   ```
+```javascript
+const PARAMS = {
+  WRAP_AMOUNT: '0.000005342',      // Amount per wrap
+  TRANSFER_AMOUNT: '0.000001234',  // Amount per transfer
+  UNWRAP_AMOUNT: '0.000004321',    // Amount per unwrap
+  TRANSFER_COUNT: 10,              // Number of transfers
+  WRAP_COUNT: 10,                  // Number of wraps
+  UNWRAP_COUNT: 10,                // Number of unwraps
+  RANDOMIZE: true,                 // Randomize amounts
+  VARIATION: 0.1                   // Variation percentage (±10%)
+};
+```
 
 ## 🔄 Usage
 
-Run the bot:
-
+**Start the bot:**
 ```bash
+npm start
+# or
 node index.js
 ```
 
-The bot will:
-1. Load your configuration and display a summary
-2. Process each wallet sequentially through the operation sequence
-3. Wait for the configured cycle interval
-4. Repeat the process until stopped
+**Stop the bot:**
+Press `Ctrl+C`
 
-Stop the bot by pressing `CTRL+C`.
+## 📊 Results Display
 
-## 📂 File Structure
+After each cycle, you'll see results like this:
 
 ```
-pharos-testnet-bot/
-├── index.js              # Main bot code
-├── package.json          # Dependencies
-├── privatekeys.txt       # Private keys (required)
-├── wallets.txt           # Target wallets for transfers (required)
-├── proxies.txt           # Proxy list (optional)
-└── README.md             # This file
+====================================================
+  INTERACTION RESULTS SUMMARY - by miraiweb3
+====================================================
+
+📋 WALLET DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0x7A3b...F42d   🚰✅  ✅✅  💸10/10  🔄9/10   🔓10/10
+0xE21a...9B0f   🚰❌  ✅✅  💸8/10   🔄10/10  🔓10/10
+
+⏱  Waiting for next cycle in: 29m 37s
 ```
 
-## 🛠️ Troubleshooting
+**Legend:**
+- 🚰 = Faucet claim
+- ✅ = Daily check-in
+- 💸 = Transfers (successful/total)
+- 🔄 = Wraps (successful/total)
+- 🔓 = Unwraps (successful/total)
 
-### Common Issues
+## 🔧 Troubleshooting
 
-- **"No private keys found"**: Ensure your `privatekeys.txt` file exists and contains valid keys
-- **Transaction failures**: Verify you have sufficient PHRS for operations
-- **API errors**: Check network connectivity and proxy settings
+**"No private keys found"**
+- Make sure `privatekeys.txt` exists with valid private keys
 
-### Proxy Management
+**Transactions failing**
+- Check if wallets have sufficient PHRS balance
+- Verify network connectivity
 
-The bot includes intelligent proxy management that:
-- Tracks success rates for each proxy
-- Automatically favors more reliable proxies
-- Temporarily disables failing proxies
-- Rotates proxies to prevent overuse
+**Faucet not available**
+- Faucet has cooldown periods, bot will retry next cycle
 
-## 📢 Disclaimer
+## ⚠️ Important Notes
 
-This bot is for educational purposes and intended for use on testnet only. Use responsibly and in accordance with network terms of service.
+- This is for **testnet only** - tokens have no real value
+- Keep your private keys secure
+- The bot runs continuously until stopped
+- Default cycle interval is 30 minutes
 
 ## 📄 License
 
 MIT License
 
-## 🙏 Acknowledgements
+## ⚠️ Disclaimer
 
-- Developed by [miraiweb3](https://github.com/mirai-web3)
-- Uses ethers.js for blockchain interactions
-- Special thanks to the Pharos Network team
+This bot is for educational purposes only.
 
 ---
 
-If you find this tool useful, consider contributing to its development or leaving a star ⭐ on GitHub.
+**Developed by:** [miraiweb3](https://github.com/mirai-web3)
