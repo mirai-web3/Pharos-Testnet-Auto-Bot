@@ -60,15 +60,17 @@ const CONFIG = {
   }
 };
 
-// ======= OPERATION PARAMETERS =======
+// ======= INTERACTION PARAMETERS =======
 const PARAMS = {
   // Transaction amounts
   WRAP_AMOUNT: '0.000005342',
   TRANSFER_AMOUNT: '0.000001234',
+  UNWRAP_AMOUNT: '0.000004321',
   
-  // Operation counts
+  // Interaction counts
   TRANSFER_COUNT: 10,
   WRAP_COUNT: 10,
+  UNWRAP_COUNT: 10,
   
   // Randomization
   RANDOMIZE: true,
@@ -704,10 +706,18 @@ class TransactionHandler {
     });
   }
   
-  async unwrapAll() {
-    this.logger.tx(`Unwrapping all remaining WPHRS balance to PHRS`);
+  async unwrap(index) {
+    // On the 10th unwrap (index 9), unwrap all remaining balance
+    const isLastUnwrap = (index + 1) === PARAMS.UNWRAP_COUNT;
     
-    return this.retryableInteraction('Unwrap All', async () => {
+    if (isLastUnwrap) {
+      this.logger.tx(`Unwrap ${index+1}: Unwrapping all remaining WPHRS balance`);
+    } else {
+      const amount = this.getRandomizedAmount(PARAMS.UNWRAP_AMOUNT);
+      this.logger.tx(`Unwrap ${index+1}: ${amount} WPHRS → PHRS`);
+    }
+    
+    return this.retryableInteraction('Unwrap', async () => {
       const balances = await this.getBalances();
       
       if (balances.wphrs === 0n) {
@@ -715,7 +725,23 @@ class TransactionHandler {
         return false;
       }
       
-      this.logger.info(`Current WPHRS balance: ${balances.wphrsFormatted}`);
+      let amountToUnwrap;
+      
+      if (isLastUnwrap) {
+        // Unwrap all remaining balance on the 10th unwrap
+        amountToUnwrap = balances.wphrs;
+        this.logger.info(`Current WPHRS balance: ${balances.wphrsFormatted} - unwrapping all`);
+      } else {
+        // Unwrap specific amount for unwraps 1-9
+        const amount = this.getRandomizedAmount(PARAMS.UNWRAP_AMOUNT);
+        amountToUnwrap = ethers.parseEther(amount);
+        
+        // Don't unwrap more than available
+        if (amountToUnwrap > balances.wphrs) {
+          amountToUnwrap = balances.wphrs;
+          this.logger.info(`Requested amount exceeds balance, unwrapping all remaining: ${balances.wphrsFormatted}`);
+        }
+      }
       
       // Check and approve if needed
       const allowance = await this.wphrsContract.allowance(
@@ -723,7 +749,7 @@ class TransactionHandler {
         CONFIG.contract.WPHRS
       );
       
-      if (allowance < balances.wphrs) {
+      if (allowance < amountToUnwrap) {
         this.logger.step(`Approving WPHRS for unwrapping...`);
         const approveTx = await this.wphrsContract.approve(
           CONFIG.contract.WPHRS, 
@@ -733,15 +759,17 @@ class TransactionHandler {
         this.logger.success(`WPHRS approval completed`);
       }
       
-      // Execute the unwrap with full balance
-      const tx = await this.wphrsContract.withdraw(balances.wphrs, {
+      // Execute the unwrap
+      const tx = await this.wphrsContract.withdraw(amountToUnwrap, {
         gasLimit: 120000,
         gasPrice: 0
       });
       
       this.logger.tx(`Tx hash: 0x${tx.hash.slice(2, 6)}...${tx.hash.slice(-4)}`);
       const receipt = await tx.wait();
-      this.logger.success(`Unwrapped ${balances.wphrsFormatted} WPHRS to PHRS`);
+      
+      const unwrappedAmount = ethers.formatEther(amountToUnwrap);
+      this.logger.success(`Unwrap ${index+1} completed`);
       
       // Log the activity
       this.logger.recordActivity(
@@ -749,18 +777,10 @@ class TransactionHandler {
         'unwrap',
         receipt.hash,
         'success',
-        { amount: balances.wphrsFormatted, blockNumber: receipt.blockNumber }
+        { amount: unwrappedAmount, blockNumber: receipt.blockNumber }
       );
       
-      // Verify the unwrap succeeded
-      const newBalances = await this.getBalances();
-      if (newBalances.wphrs === 0n) {
-        this.logger.success(`Unwrap successful, new WPHRS balance is zero`);
-        return true;
-      } else {
-        this.logger.warn(`Unwrap may have partially failed, remaining WPHRS: ${newBalances.wphrsFormatted}`);
-        return false;
-      }
+      return true;
     });
   }
   
@@ -806,12 +826,13 @@ class TransactionHandler {
 }
 
 /**
- * Tracks statistics for interactions
+ * Tracks statistics for interactions and displays results
  */
 class InteractionTracker {
   constructor() {
     this.reset();
     this.startTime = Date.now();
+    this.walletResults = [];
   }
   
   reset() {
@@ -825,6 +846,7 @@ class InteractionTracker {
     };
     this.successfulOps = 0;
     this.totalOps = 0;
+    this.walletResults = [];
   }
   
   incrementWallet() {
@@ -841,6 +863,49 @@ class InteractionTracker {
     if (success) {
       this.successfulOps++;
     }
+  }
+  
+  /**
+   * Records results for a specific wallet
+   */
+  recordWalletResult(walletAddress, results) {
+    this.walletResults.push({
+      address: walletAddress,
+      ...results
+    });
+  }
+  
+  /**
+   * Displays the interaction results summary
+   */
+  displayResults() {
+    // Clear screen for results
+    process.stdout.write('\x1Bc');
+    console.clear();
+    
+    const banner = `
+${colors.cyan}${colors.bright}====================================================
+  INTERACTION RESULTS SUMMARY - by miraiweb3
+====================================================${colors.reset}
+
+📋 WALLET DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    
+    console.log(banner);
+    
+    // Display wallet results
+    this.walletResults.forEach(wallet => {
+      const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
+      const faucet = wallet.faucetSuccess ? '🚰✅' : '🚰❌';
+      const checkin = wallet.checkinSuccess ? '✅✅' : '✅❌';
+      const transfers = `💸${wallet.transferCount}/${PARAMS.TRANSFER_COUNT}`;
+      const wraps = `🔄${wallet.wrapCount}/${PARAMS.WRAP_COUNT}`;
+      const unwraps = `🔓${wallet.unwrapCount}/${PARAMS.UNWRAP_COUNT}`;
+      
+      console.log(`${shortAddr}   ${faucet}  ${checkin}  ${transfers}  ${wraps}  ${unwraps}`);
+    });
+    
+    console.log('');
   }
 }
 
@@ -874,6 +939,15 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   const txHandler = new TransactionHandler(wallet, logger);
   const pharosApi = new PharosAPI(wallet, logger, proxy);
   
+  // Initialize wallet result tracking
+  const walletResult = {
+    faucetSuccess: false,
+    checkinSuccess: false,
+    transferCount: 0,
+    wrapCount: 0,
+    unwrapCount: 0
+  };
+  
   // Log initial balances
   const initialBalances = await txHandler.getBalances();
   logger.info(`Initial Balances - PHRS: ${initialBalances.phrsFormatted} | WPHRS: ${initialBalances.wphrsFormatted}`);
@@ -883,6 +957,7 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   const faucetSuccess = await pharosApi.claimFaucet();
   stats.recordInteraction('faucets', faucetSuccess);
   logger.recordStepResult("Faucet", faucetSuccess, faucetSuccess ? "Claimed successfully" : "Not available or failed");
+  walletResult.faucetSuccess = faucetSuccess;
   
   await sleep(...CONFIG.timing.betweenInteractions);
   
@@ -891,6 +966,7 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   const checkinSuccess = await pharosApi.dailyCheckIn();
   stats.recordInteraction('checkins', checkinSuccess);
   logger.recordStepResult("Check-in", checkinSuccess, checkinSuccess ? "Completed successfully" : "Already done or failed");
+  walletResult.checkinSuccess = checkinSuccess;
   
   await sleep(...CONFIG.timing.betweenInteractions);
   
@@ -918,6 +994,7 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   
   logger.info(`Completed ${transferCount}/${PARAMS.TRANSFER_COUNT} transfers`);
   logger.recordStepResult("Transfers", transferCount > 0, `${transferCount}/${PARAMS.TRANSFER_COUNT} completed`);
+  walletResult.transferCount = transferCount;
   
   await sleep(...CONFIG.timing.betweenInteractions);
   
@@ -936,19 +1013,33 @@ async function processWallet(wallet, proxy, targetAddresses, walletIndex, totalW
   
   logger.info(`Completed ${wrapCount}/${PARAMS.WRAP_COUNT} wraps`);
   logger.recordStepResult("Wraps", wrapCount > 0, `${wrapCount}/${PARAMS.WRAP_COUNT} completed`);
+  walletResult.wrapCount = wrapCount;
   
   await sleep(...CONFIG.timing.betweenInteractions);
   
-  // 5. STEP FIVE: UNWRAP ALL WPHRS TO PHRS
-  logger.operation(walletIndex, totalWallets, shortAddress, "STEP 5: UNWRAP ALL WPHRS → PHRS");
+  // 5. STEP FIVE: UNWRAP WPHRS TO PHRS
+  logger.operation(walletIndex, totalWallets, shortAddress, "STEP 5: UNWRAP WPHRS → PHRS");
+  let unwrapCount = 0;
   
-  const unwrapSuccess = await txHandler.unwrapAll();
-  stats.recordInteraction('unwraps', unwrapSuccess);
-  logger.recordStepResult("Unwrap", unwrapSuccess, unwrapSuccess ? "Unwrapped all WPHRS" : "No WPHRS to unwrap or failed");
+  for (let i = 0; i < PARAMS.UNWRAP_COUNT; i++) {
+    const success = await txHandler.unwrap(i);
+    stats.recordInteraction('unwraps', success);
+    
+    if (success) unwrapCount++;
+    
+    await sleep(...CONFIG.timing.betweenInteractions);
+  }
+  
+  logger.info(`Completed ${unwrapCount}/${PARAMS.UNWRAP_COUNT} unwraps`);
+  logger.recordStepResult("Unwraps", unwrapCount > 0, `${unwrapCount}/${PARAMS.UNWRAP_COUNT} completed`);
+  walletResult.unwrapCount = unwrapCount;
   
   // Get final balances
   const finalBalances = await txHandler.getBalances();
   logger.info(`Final Balances - PHRS: ${finalBalances.phrsFormatted} | WPHRS: ${finalBalances.wphrsFormatted}`);
+  
+  // Record wallet result
+  stats.recordWalletResult(wallet.address, walletResult);
   
   // Record wallet completion
   stats.incrementWallet();
@@ -1047,8 +1138,8 @@ async function main() {
       }
     }
     
-    const proxyStats = proxyManager.getStats();
-    logger.info(`Cycle completed - Proxy Status: ${proxyStats.available}/${proxyStats.total} available`);
+    // Display interaction results
+    stats.displayResults();
     
     // Wait before next cycle - skip the info message and go directly to countdown
     await countdown(CONFIG.timing.cycleInterval);
