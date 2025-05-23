@@ -2,6 +2,10 @@
 
 Automated bot for interacting with the Pharos testnet blockchain.
 
+- Register Here : [Pharos Testnet](https://testnet.pharosnetwork.xyz/experience?inviteCode=pcDSvtHJeoqTPMAU)  
+- Connect Your Wallet  
+- Connect X & Discord Account
+
 ## 🚀 Functions
 
 The bot performs these interactions automatically:
