@@ -6,7 +6,7 @@ Automated bot for interacting with the Pharos testnet blockchain.
 
 The bot performs these interactions automatically:
 
-- **🚰 Faucet Claims** - Claims testnet tokens when available
+- **🚰 Faucet Claims** - Claims testnet tokens when available (Make sure you have Connect X & Discord Account)
 - **✅ Daily Check-ins** - Performs daily check-ins for rewards
 - **💸 PHRS Transfers** - Sends PHRS tokens between wallets
 - **🔄 Token Wrapping** - Wraps PHRS to WPHRS (10 times)
