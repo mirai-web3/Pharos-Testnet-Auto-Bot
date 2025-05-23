@@ -4,13 +4,13 @@ Automated bot for interacting with the Pharos testnet blockchain.
 
 - Register Here : [Pharos Testnet](https://testnet.pharosnetwork.xyz/experience?inviteCode=pcDSvtHJeoqTPMAU)  
 - Connect Your Wallet  
-- Connect X & Discord Account
+- Connect X and Discord Account
 
 ## 🚀 Functions
 
 The bot performs these interactions automatically:
 
-- **🚰 Faucet Claims** - Claims testnet tokens when available (Make sure you have Connect X & Discord Account)
+- **🚰 Faucet Claims** - Claims testnet tokens when available (Make sure you have connected your X account)
 - **✅ Daily Check-ins** - Performs daily check-ins for rewards
 - **💸 PHRS Transfers** - Sends PHRS tokens between wallets
 - **🔄 Token Wrapping** - Wraps PHRS to WPHRS (10 times)
